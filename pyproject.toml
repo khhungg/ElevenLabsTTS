@@ -1,0 +1,15 @@
+[project]
+name = "elevenlabs-tts-service"
+version = "0.1.0"
+description = "Standalone ElevenLabs TTS service with per-character voice routing"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "fastapi[standard]>=0.115.8",
+    "elevenlabs>=1.50.0",
+    "httpx>=0.28.1",
+    "loguru>=0.7.2",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.1",
+    "pyyaml>=6.0.2",
+    "uvicorn[standard]>=0.33.0",
+]

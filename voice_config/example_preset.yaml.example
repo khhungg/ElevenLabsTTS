@@ -1,0 +1,24 @@
+# Example: a character that uses an existing ElevenLabs voice (no cloning).
+#
+# Copy this file as `<character_name>.yaml` (matches incoming `character_name`).
+# E.g. for the Mao character in conf.yaml, copy to `Mao.yaml`.
+#
+# Files ending in `.yaml.example` are IGNORED by the server. Only `.yaml`
+# / `.yml` files are loaded as character configs.
+
+mode: preset
+
+# Find voice_id values at https://elevenlabs.io/app/voice-lab
+# or call GET http://127.0.0.1:9885/voices to list all voices on your account.
+voice_id: "21m00Tcm4TlvDq8ikWAM"   # ElevenLabs built-in "Rachel"
+
+model_id: eleven_flash_v2_5
+output_format: mp3_44100_128
+streaming_output_format: pcm_24000
+optimize_streaming_latency: 3
+
+voice_settings:
+  stability: 0.5
+  similarity_boost: 0.75
+  style: 0.0
+  use_speaker_boost: true

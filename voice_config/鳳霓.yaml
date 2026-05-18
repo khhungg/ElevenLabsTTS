@@ -1,0 +1,18 @@
+# 鳳霓 — 使用 CosyVoice pineapple reference wav 串接後的音檔做 ElevenLabs IVC voice cloning.
+# 檔案已複製到 ElevenLabsTTS/ref_audio/鳳霓/，因此 ElevenLabsTTS 仍是獨立可搬移的服務。
+
+mode: clone
+reference_audio_path: "鳳霓/ref.wav"
+voice_cache_key: fengni_v1
+
+model_id: eleven_flash_v2_5
+output_format: mp3_44100_128
+streaming_output_format: pcm_24000
+optimize_streaming_latency: 3
+language_code: zh
+
+voice_settings:
+  stability: 0.55
+  similarity_boost: 0.85
+  style: 0.0
+  use_speaker_boost: true

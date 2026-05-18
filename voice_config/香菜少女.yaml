@@ -1,0 +1,16 @@
+# 香菜少女 — 使用 ElevenLabs 內建女聲，不做 voice cloning。
+
+mode: preset
+voice_id: "21m00Tcm4TlvDq8ikWAM" # ElevenLabs built-in "Rachel"
+
+model_id: eleven_flash_v2_5
+output_format: mp3_44100_128
+streaming_output_format: pcm_24000
+optimize_streaming_latency: 3
+language_code: zh
+
+voice_settings:
+  stability: 0.5
+  similarity_boost: 0.75
+  style: 0.0
+  use_speaker_boost: true

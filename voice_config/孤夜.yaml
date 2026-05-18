@@ -1,0 +1,18 @@
+# 孤夜 — CosyVoice 目前沒有孤夜/guye 專用 reference，先使用同系列夜羽音檔做 IVC。
+# 之後若有孤夜專用 wav，只要替換 ElevenLabsTTS/ref_audio/孤夜/ref.wav 並更新 voice_cache_key 即可重做 clone。
+
+mode: clone
+reference_audio_path: "孤夜/ref.wav"
+voice_cache_key: guye_v1
+
+model_id: eleven_flash_v2_5
+output_format: mp3_44100_128
+streaming_output_format: pcm_24000
+optimize_streaming_latency: 3
+language_code: zh
+
+voice_settings:
+  stability: 0.55
+  similarity_boost: 0.85
+  style: 0.0
+  use_speaker_boost: true

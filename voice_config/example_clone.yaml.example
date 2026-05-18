@@ -1,0 +1,35 @@
+# Example: a character that is voice-cloned (IVC) from a local reference file.
+#
+# Copy this file as `<character_name>.yaml` (matches incoming `character_name`),
+# then drop a clean single-speaker WAV/MP3 into the path below.
+# Recommended: 1-2 minutes of clean audio, single speaker, no background noise.
+#
+# Files ending in `.yaml.example` are IGNORED by the server. Only `.yaml`
+# / `.yml` files are loaded as character configs.
+#
+# `reference_audio_path` resolution order:
+#   1. Absolute path     ->  used as-is
+#   2. Starts with `ref_audio/`  ->  relative to the service root
+#       (e.g. `ref_audio/小緣/ref.wav` -> ElevenLabsTTS/ref_audio/小緣/ref.wav)
+#   3. Plain relative path       ->  relative to ref_audio/
+#       (e.g. `小緣/ref.wav` -> ElevenLabsTTS/ref_audio/小緣/ref.wav)
+
+mode: clone
+
+reference_audio_path: "ref_audio/小緣/ref.wav"
+
+# IMPORTANT: this key is the cache lookup. Keep it stable — changing it forces
+# a new IVC clone (which consumes one voice slot on your account).
+voice_cache_key: yuan_v1
+
+model_id: eleven_flash_v2_5
+output_format: mp3_44100_128
+streaming_output_format: pcm_24000
+optimize_streaming_latency: 3
+
+# Higher similarity_boost = stronger match to the reference voice.
+voice_settings:
+  stability: 0.55
+  similarity_boost: 0.85
+  style: 0.0
+  use_speaker_boost: true

@@ -1,0 +1,11 @@
+.env
+cache/elevenlabs_voices.json
+cache/*.tmp
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+
+# Reference audio (real-voice samples, not redistributed)
+ref_audio/*
+!ref_audio/.gitkeep
