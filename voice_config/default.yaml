@@ -1,13 +1,9 @@
-# Fallback config used when an incoming request's `character_name` does not
-# match any other file in this folder.
-
 mode: preset
-voice_id: "4aW8bNY2tSD8eaHmuXZ0"    # ElevenLabs built-in "George"
+voice_id: LIisRj2veIKEBdr6KZ5y
 model_id: eleven_flash_v2_5
 output_format: mp3_44100_128
 streaming_output_format: pcm_24000
 optimize_streaming_latency: 3
-
 voice_settings:
   stability: 0.5
   similarity_boost: 0.75

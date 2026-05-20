@@ -30,6 +30,7 @@ from typing import Any, AsyncGenerator, Optional
 
 import httpx
 import uvicorn
+import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +70,11 @@ class ElevenLabsEngine:
         self.api_base_url = api_base_url.rstrip("/")
         self.timeout = timeout
 
+        # Lazy-loaded pykakasi instance for Japanese kanji→hiragana fallback.
+        # Only activated when a request specifies Japanese as language_code.
+        self._kakasi: Any | None = None
+        self._kakasi_failed: bool = False
+
     # ------------------------------------------------------------------ #
     # Helpers                                                            #
     # ------------------------------------------------------------------ #
@@ -76,6 +82,78 @@ class ElevenLabsEngine:
     def _clean_text(text: str) -> str:
         """Strip bracketed control tokens (e.g. ``[emotion:happy]``)."""
         return re.sub(r"\[.*?\]", "", text).strip()
+
+    # ------------------------------------------------------------------ #
+    # Japanese kanji → hiragana (lazy pykakasi)                          #
+    # ------------------------------------------------------------------ #
+    _KANJI_RE = re.compile(r"[\u4e00-\u9fff]")
+
+    def _load_kakasi(self) -> bool:
+        """Lazy-import pykakasi on first Japanese request. Returns True if usable."""
+        if self._kakasi is not None:
+            return True
+        if self._kakasi_failed:
+            return False
+        try:
+            import pykakasi  # type: ignore
+
+            self._kakasi = pykakasi.kakasi()
+            logger.info(
+                "pykakasi loaded; Japanese kanji will be converted to hiragana "
+                "when language_code is ja."
+            )
+            return True
+        except ImportError:
+            self._kakasi_failed = True
+            logger.warning(
+                "pykakasi not installed; Japanese kanji→hiragana conversion "
+                "disabled. Install with: uv add pykakasi"
+            )
+            return False
+
+    def _kanji_to_hiragana(self, text: str) -> str:
+        """Replace kanji-containing tokens with their hiragana reading.
+
+        Preserves katakana, ASCII, digits, and punctuation untouched so the
+        model still gets the natural prosody cues of those tokens.
+        """
+        if not self._load_kakasi():
+            return text
+
+        try:
+            tokens = self._kakasi.convert(text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"pykakasi convert failed, using original text: {exc}")
+            return text
+
+        out: list[str] = []
+        for item in tokens:
+            orig = item.get("orig", "")
+            hira = item.get("hira", "")
+            if self._KANJI_RE.search(orig) and hira:
+                out.append(hira)
+            else:
+                out.append(orig)
+        return "".join(out)
+
+    def _maybe_convert_japanese(
+        self,
+        text: str,
+        cfg: VoiceConfig,
+        language_code: Optional[str],
+    ) -> str:
+        """Apply kanji→hiragana only when the resolved language is Japanese."""
+        selected = (language_code or cfg.language_code or "").strip().lower()
+        if not selected.startswith("ja"):
+            return text
+        if not self._KANJI_RE.search(text):
+            return text
+        converted = self._kanji_to_hiragana(text)
+        if converted != text:
+            logger.debug(
+                f"ja kanji→hiragana: '{text[:40]}...' → '{converted[:40]}...'"
+            )
+        return converted
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -149,6 +227,7 @@ class ElevenLabsEngine:
         clean_text = self._clean_text(text)
         if not clean_text:
             raise ValueError("text is empty after cleaning")
+        clean_text = self._maybe_convert_japanese(clean_text, cfg, language_code)
 
         url = (
             f"{self.api_base_url}/v1/text-to-speech/{voice_id}"
@@ -185,6 +264,7 @@ class ElevenLabsEngine:
         clean_text = self._clean_text(text)
         if not clean_text:
             raise ValueError("text is empty after cleaning")
+        clean_text = self._maybe_convert_japanese(clean_text, cfg, language_code)
 
         params: dict[str, str] = {
             "output_format": cfg.streaming_output_format,
@@ -310,6 +390,171 @@ async def reload_configs() -> dict[str, Any]:
     return {
         "ok": True,
         "characters": list(engine.voice_manager.characters.keys()),
+    }
+
+
+class VoiceConfigUpdate(BaseModel):
+    voice_id: Optional[str] = None
+    model_id: Optional[str] = None
+    output_format: Optional[str] = None
+    streaming_output_format: Optional[str] = None
+    optimize_streaming_latency: Optional[int] = None
+    language_code: Optional[str] = None
+    voice_settings: Optional[dict[str, Any]] = None
+
+
+_CHARACTER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_\-]+$")
+
+
+def _resolve_yaml_path(character: str) -> Path:
+    """Resolve and validate the yaml config path for a character."""
+    if not _CHARACTER_NAME_PATTERN.match(character):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid character name. Only alphanumeric, underscore "
+                "and dash characters are allowed."
+            ),
+        )
+    if engine is None:
+        raise HTTPException(status_code=503, detail="engine not initialized")
+
+    config_dir = engine.voice_manager.config_dir
+    yaml_path = (config_dir / f"{character}.yaml").resolve()
+    config_dir_resolved = config_dir.resolve()
+
+    try:
+        yaml_path.relative_to(config_dir_resolved)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Resolved path escapes voice_config directory.",
+        ) from exc
+
+    return yaml_path
+
+
+@app.get("/voice_config/{character}")
+async def get_voice_config(character: str) -> dict[str, Any]:
+    """Return the raw yaml config for a character (e.g. 'default')."""
+    if engine is None:
+        raise HTTPException(status_code=503, detail="engine not initialized")
+
+    yaml_path = _resolve_yaml_path(character)
+    if not yaml_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"voice_config/{character}.yaml does not exist",
+        )
+
+    try:
+        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail=f"failed to read yaml: {exc}",
+        ) from exc
+
+    return {
+        "ok": True,
+        "character": character,
+        "config": raw,
+    }
+
+
+@app.put("/voice_config/{character}")
+async def update_voice_config(
+    character: str, update: VoiceConfigUpdate
+) -> dict[str, Any]:
+    """Update a character's yaml config in-place and reload the voice manager.
+
+    Only fields that are sent in the request body are updated; existing
+    fields are preserved. After the file is written, ``load_configs()`` is
+    called so the next TTS request picks up the new value immediately.
+    """
+    if engine is None:
+        raise HTTPException(status_code=503, detail="engine not initialized")
+
+    yaml_path = _resolve_yaml_path(character)
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if yaml_path.exists():
+        try:
+            current = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=500,
+                detail=f"failed to read existing yaml: {exc}",
+            ) from exc
+    else:
+        current = {"mode": "preset"}
+
+    payload = update.model_dump(exclude_none=True)
+
+    if "voice_id" in payload:
+        voice_id = (payload["voice_id"] or "").strip()
+        if not voice_id:
+            raise HTTPException(
+                status_code=400,
+                detail="voice_id must not be empty",
+            )
+        current["voice_id"] = voice_id
+        # Editing voice_id implies preset mode.
+        current.setdefault("mode", "preset")
+        if current.get("mode") != "preset":
+            current["mode"] = "preset"
+
+    for key in (
+        "model_id",
+        "output_format",
+        "streaming_output_format",
+        "optimize_streaming_latency",
+        "language_code",
+    ):
+        if key in payload:
+            current[key] = payload[key]
+
+    if "voice_settings" in payload and isinstance(payload["voice_settings"], dict):
+        existing_settings = current.get("voice_settings") or {}
+        if not isinstance(existing_settings, dict):
+            existing_settings = {}
+        existing_settings.update(payload["voice_settings"])
+        current["voice_settings"] = existing_settings
+
+    tmp = yaml_path.with_suffix(".yaml.tmp")
+    try:
+        tmp.write_text(
+            yaml.safe_dump(
+                current,
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False,
+            ),
+            encoding="utf-8",
+        )
+        tmp.replace(yaml_path)
+    except Exception as exc:  # noqa: BLE001
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"failed to write yaml: {exc}",
+        ) from exc
+
+    engine.voice_manager.load_configs()
+
+    logger.info(
+        f"Updated voice_config/{character}.yaml via API "
+        f"(voice_id={current.get('voice_id', '')!r})"
+    )
+
+    return {
+        "ok": True,
+        "character": character,
+        "config": current,
     }
 
 

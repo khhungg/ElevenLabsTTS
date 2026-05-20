@@ -1,11 +1,58 @@
-.env
+# NOTE: This is a private repo, so .env (with API key) is intentionally tracked.
+# If you ever make this repo public, add `.env` back to this file.
+
+# --- Python build & cache (regenerated at runtime, not needed for execution) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Virtual environments (each user creates their own) ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- ElevenLabs runtime cache (regenerated on startup) ---
 cache/elevenlabs_voices.json
 cache/*.tmp
-__pycache__/
-*.pyc
-.venv/
-uv.lock
 
-# Reference audio (real-voice samples, not redistributed)
+# --- Reference audio (real-voice samples, too large / not redistributed) ---
 ref_audio/*
 !ref_audio/.gitkeep
+
+# --- Large media / archives (don't push to GitHub) ---
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+desktop.ini
